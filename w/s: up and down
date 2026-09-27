@@ -1,0 +1,543 @@
+Absolutely — here is the complete standalone HTML source code. Save it as pong.html and open it in a browser.
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pong</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #111;
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+    .game-container {
+      width: min(960px, 95vw);
+      text-align: center;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 2rem;
+    }
+    .score {
+      font-size: 2rem;
+      margin-bottom: 12px;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #050505;
+      border: 3px solid white;
+      border-radius: 8px;
+      touch-action: none;
+    }
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 15px;
+      flex-wrap: wrap;
+    }
+    button {
+      min-width: 120px;
+      min-height: 44px;
+      padding: 10px 20px;
+      border: 0;
+      border-radius: 6px;
+      background: white;
+      color: #111;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #ddd;
+    }
+    .instructions {
+      margin-top: 12px;
+      color: #aaa;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <main class="game-container">
+    <h1>PONG</h1>
+    <div class="score">
+      <span id="playerScore">0</span>
+      -
+      <span id="cpuScore">0</span>
+    </div>
+    <canvas
+      id="gameCanvas"
+      width="960"
+      height="600">
+    </canvas>
+    <div class="controls">
+      <button id="pauseButton">Pause</button>
+      <button id="restartButton">Restart</button>
+    </div>
+    <div class="instructions">
+      Move with W/S or ↑/↓. On mobile, drag your paddle.
+      First player to 7 wins.
+    </div>
+  </main>
+  <script>
+    // =========================
+    // Canvas
+    // =========================
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const playerScoreElement =
+      document.getElementById("playerScore");
+    const cpuScoreElement =
+      document.getElementById("cpuScore");
+    const pauseButton =
+      document.getElementById("pauseButton");
+    const restartButton =
+      document.getElementById("restartButton");
+    // =========================
+    // Game settings
+    // =========================
+    const WIDTH = canvas.width;
+    const HEIGHT = canvas.height;
+    const PADDLE_WIDTH = 18;
+    const PADDLE_HEIGHT = 120;
+    const PADDLE_SPEED = 520;
+    const BALL_SIZE = 16;
+    const WINNING_SCORE = 7;
+    // =========================
+    // Game state
+    // =========================
+    let playerY;
+    let cpuY;
+    let ballX;
+    let ballY;
+    let ballVelocityX;
+    let ballVelocityY;
+    let playerScore = 0;
+    let cpuScore = 0;
+    let paused = false;
+    let gameOver = false;
+    let lastTime = performance.now();
+    // =========================
+    // Keyboard
+    // =========================
+    const keys = new Set();
+    window.addEventListener("keydown", function(event) {
+      if (
+        event.key === "ArrowUp" ||
+        event.key === "ArrowDown" ||
+        event.key === " "
+      ) {
+        event.preventDefault();
+      }
+      keys.add(event.key.toLowerCase());
+      if (event.key === " ") {
+        togglePause();
+      }
+    });
+    window.addEventListener("keyup", function(event) {
+      keys.delete(event.key.toLowerCase());
+    });
+    // =========================
+    // Utility functions
+    // =========================
+    function clamp(value, minimum, maximum) {
+      return Math.max(
+        minimum,
+        Math.min(maximum, value)
+      );
+    }
+    // =========================
+    // Reset ball
+    // =========================
+    function resetBall(direction) {
+      ballX = WIDTH / 2 - BALL_SIZE / 2;
+      ballY = HEIGHT / 2 - BALL_SIZE / 2;
+      ballVelocityX = direction * 6;
+      ballVelocityY =
+        (Math.random() - 0.5) * 6;
+    }
+    // =========================
+    // Reset game
+    // =========================
+    function resetGame() {
+      playerY =
+        HEIGHT / 2 - PADDLE_HEIGHT / 2;
+      cpuY =
+        HEIGHT / 2 - PADDLE_HEIGHT / 2;
+      playerScore = 0;
+      cpuScore = 0;
+      paused = false;
+      gameOver = false;
+      playerScoreElement.textContent = "0";
+      cpuScoreElement.textContent = "0";
+      pauseButton.textContent = "Pause";
+      resetBall(
+        Math.random() < 0.5 ? -1 : 1
+      );
+    }
+    // =========================
+    // Collision detection
+    // =========================
+    function collision(
+      x,
+      y,
+      width,
+      height
+    ) {
+      return (
+        ballX < x + width &&
+        ballX + BALL_SIZE > x &&
+        ballY < y + height &&
+        ballY + BALL_SIZE > y
+      );
+    }
+    // =========================
+    // Score
+    // =========================
+    function scorePlayer() {
+      playerScore++;
+      playerScoreElement.textContent =
+        playerScore;
+      checkWinner();
+      if (!gameOver) {
+        resetBall(-1);
+      }
+    }
+    function scoreCPU() {
+      cpuScore++;
+      cpuScoreElement.textContent =
+        cpuScore;
+      checkWinner();
+      if (!gameOver) {
+        resetBall(1);
+      }
+    }
+    function checkWinner() {
+      if (
+        playerScore >= WINNING_SCORE ||
+        cpuScore >= WINNING_SCORE
+      ) {
+        gameOver = true;
+        paused = true;
+        pauseButton.textContent = "Play";
+      }
+    }
+    // =========================
+    // Update game
+    // =========================
+    function update(deltaTime) {
+      // Player movement
+      if (
+        keys.has("w") ||
+        keys.has("arrowup")
+      ) {
+        playerY -=
+          PADDLE_SPEED * deltaTime;
+      }
+      if (
+        keys.has("s") ||
+        keys.has("arrowdown")
+      ) {
+        playerY +=
+          PADDLE_SPEED * deltaTime;
+      }
+      playerY = clamp(
+        playerY,
+        0,
+        HEIGHT - PADDLE_HEIGHT
+      );
+      // CPU movement
+      const cpuTarget =
+        ballY + BALL_SIZE / 2;
+      const cpuCenter =
+        cpuY + PADDLE_HEIGHT / 2;
+      cpuY +=
+        (cpuTarget - cpuCenter) *
+        Math.min(1, 3.2 * deltaTime);
+      cpuY = clamp(
+        cpuY,
+        0,
+        HEIGHT - PADDLE_HEIGHT
+      );
+      // Ball movement
+      ballX +=
+        ballVelocityX * 60 * deltaTime;
+      ballY +=
+        ballVelocityY * 60 * deltaTime;
+      // Top and bottom walls
+      if (ballY <= 0) {
+        ballY = 0;
+        ballVelocityY =
+          Math.abs(ballVelocityY);
+      }
+      if (
+        ballY + BALL_SIZE >= HEIGHT
+      ) {
+        ballY =
+          HEIGHT - BALL_SIZE;
+        ballVelocityY =
+          -Math.abs(ballVelocityY);
+      }
+      // Player paddle
+      const playerPaddleX = 28;
+      if (
+        collision(
+          playerPaddleX,
+          playerY,
+          PADDLE_WIDTH,
+          PADDLE_HEIGHT
+        ) &&
+        ballVelocityX < 0
+      ) {
+        ballX =
+          playerPaddleX +
+          PADDLE_WIDTH;
+        ballVelocityX =
+          Math.abs(ballVelocityX) * 1.04;
+        const relativeIntersection =
+          (
+            ballY +
+            BALL_SIZE / 2 -
+            (
+              playerY +
+              PADDLE_HEIGHT / 2
+            )
+          ) /
+          (PADDLE_HEIGHT / 2);
+        ballVelocityY =
+          relativeIntersection * 7;
+      }
+      // CPU paddle
+      const cpuPaddleX =
+        WIDTH -
+        28 -
+        PADDLE_WIDTH;
+      if (
+        collision(
+          cpuPaddleX,
+          cpuY,
+          PADDLE_WIDTH,
+          PADDLE_HEIGHT
+        ) &&
+        ballVelocityX > 0
+      ) {
+        ballX =
+          cpuPaddleX -
+          BALL_SIZE;
+        ballVelocityX =
+          -Math.abs(ballVelocityX) * 1.04;
+        const relativeIntersection =
+          (
+            ballY +
+            BALL_SIZE / 2 -
+            (
+              cpuY +
+              PADDLE_HEIGHT / 2
+            )
+          ) /
+          (PADDLE_HEIGHT / 2);
+        ballVelocityY =
+          relativeIntersection * 7;
+      }
+      // Ball leaves left side
+      if (
+        ballX + BALL_SIZE < 0
+      ) {
+        scoreCPU();
+      }
+      // Ball leaves right side
+      if (ballX > WIDTH) {
+        scorePlayer();
+      }
+    }
+    // =========================
+    // Draw game
+    // =========================
+    function draw() {
+      // Background
+      ctx.fillStyle = "#050505";
+      ctx.fillRect(
+        0,
+        0,
+        WIDTH,
+        HEIGHT
+      );
+      // Center line
+      ctx.strokeStyle =
+        "rgba(255,255,255,0.3)";
+      ctx.lineWidth = 3;
+      ctx.setLineDash([
+        12,
+        18
+      ]);
+      ctx.beginPath();
+      ctx.moveTo(
+        WIDTH / 2,
+        0
+      );
+      ctx.lineTo(
+        WIDTH / 2,
+        HEIGHT
+      );
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Paddles and ball
+      ctx.fillStyle = "white";
+      // Player
+      ctx.fillRect(
+        28,
+        playerY,
+        PADDLE_WIDTH,
+        PADDLE_HEIGHT
+      );
+      // CPU
+      ctx.fillRect(
+        WIDTH -
+        28 -
+        PADDLE_WIDTH,
+        cpuY,
+        PADDLE_WIDTH,
+        PADDLE_HEIGHT
+      );
+      // Ball
+      ctx.fillRect(
+        ballX,
+        ballY,
+        BALL_SIZE,
+        BALL_SIZE
+      );
+      // Pause / game-over overlay
+      if (paused) {
+        ctx.fillStyle =
+          "rgba(0,0,0,0.55)";
+        ctx.fillRect(
+          0,
+          0,
+          WIDTH,
+          HEIGHT
+        );
+        ctx.fillStyle = "white";
+        ctx.font =
+          "bold 44px Arial";
+        ctx.textAlign = "center";
+        let message = "PAUSED";
+        if (gameOver) {
+          message =
+            playerScore > cpuScore
+              ? "YOU WIN!"
+              : "CPU WINS!";
+        }
+        ctx.fillText(
+          message,
+          WIDTH / 2,
+          HEIGHT / 2
+        );
+      }
+    }
+    // =========================
+    // Game loop
+    // =========================
+    function gameLoop(currentTime) {
+      const deltaTime =
+        Math.min(
+          0.033,
+          (currentTime - lastTime) / 1000
+        );
+      lastTime = currentTime;
+      if (!paused && !gameOver) {
+        update(deltaTime);
+      }
+      draw();
+      requestAnimationFrame(
+        gameLoop
+      );
+    }
+    // =========================
+    // Pause
+    // =========================
+    function togglePause() {
+      if (gameOver) {
+        return;
+      }
+      paused = !paused;
+      pauseButton.textContent =
+        paused ? "Play" : "Pause";
+    }
+    pauseButton.addEventListener(
+      "click",
+      togglePause
+    );
+    restartButton.addEventListener(
+      "click",
+      resetGame
+    );
+    // =========================
+    // Touch controls
+    // =========================
+    function movePlayerToTouch(event) {
+      const rectangle =
+        canvas.getBoundingClientRect();
+      const scaleY =
+        HEIGHT / rectangle.height;
+      const touchY =
+        (
+          event.clientY -
+          rectangle.top
+        ) * scaleY;
+      playerY =
+        clamp(
+          touchY -
+            PADDLE_HEIGHT / 2,
+          0,
+          HEIGHT - PADDLE_HEIGHT
+        );
+    }
+    canvas.addEventListener(
+      "pointerdown",
+      function(event) {
+        canvas.setPointerCapture?.(
+          event.pointerId
+        );
+        movePlayerToTouch(event);
+      }
+    );
+    canvas.addEventListener(
+      "pointermove",
+      function(event) {
+        if (event.buttons) {
+          movePlayerToTouch(event);
+        }
+      }
+    );
+    // =========================
+    // Start
+    // =========================
+    resetGame();
+    requestAnimationFrame(
+      gameLoop
+    );
+  </script>
+</body>
+</html>
+
+Controls
+
+* W / S — move your paddle
+* ↑ / ↓ — move your paddle
+* Space — pause/play
+* Touch/drag — move the paddle on mobile
+* Restart — start a new match
+* First to 7 points wins.
